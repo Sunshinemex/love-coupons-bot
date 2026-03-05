@@ -1,234 +1,182 @@
-import telebot
-import json
+import os
 import random
-from datetime import datetime
+import json
+from datetime import date
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
-TOKEN = "8712590812:AAFrsZYzeKmhN3DzbolNlzU16ixNUnRAgf0"
-OWNER_ID = 200869072
-
-bot = telebot.TeleBot(TOKEN)
+TOKEN = os.getenv("8712590812:AAFrsZYzeKmhN3DzbolNlzU16ixNUnRAgf0")
+ADMIN_ID = int(os.getenv("200869072"))
 
 DATA_FILE = "data.json"
 
-love_replies = [
-"Этот бот сделан с любовью для тебя 💌",
-"Мне нравится радовать тебя ❤️"
-]
-
 messages = [
-"🐀 Я тебя люблю, потому что у тебя стильная прическа!",
-"🐀 Я тебя люблю, потому что ты мой самый классный бизнесмен!",
-"🐀 Я горжусь тобой больше, чем ты думаешь 🤍",
 "🐀 Я тебя люблю, потому что ты самый заботливый!",
-"🐀 Ты — мой личный герой без плаща",
-"🐀 Даже в плохой день ты — моё хорошее",
-"🐀 Люблю тебя так сильно, что даже вселенная немного завидует"
+"❤️ Мне нравится, как ты улыбаешься.",
+"💌 Я очень счастлива быть твоей женой.",
+"🌙 Ты делаешь мои дни лучше.",
+"🩵 Я люблю нашу жизнь вместе."
 ]
 
 coupons = [
-"🧡 Купон на массаж",
-"🧡 Купон на массаж",
-"🧡 Купон на массаж ног",
-"🧡 Купон на кофе в постель",
-"🧡 Купон на поцелуй",
-"🧡 Купон на выгул Тузика утром",
 "🩵 Купон на свидание",
-"🩵 Купон на желание",
-"🩵 Ужин на твой выбор",
-"🩵 Купон «Поцелуйная атака»",
-"❤️ Купон «Я официально признаю, что ты был прав»",
-"❤️ Купон «Ночь компьютерного рейда»",
-"❤️‍🔥 Купон «Не дурю голову целый день»",
-"❤️‍🔥 Купон на исполнение любой тайной фантазии",
-"❤️‍🔥 Купон «Доброе утро по-особенному»",
-"❤️‍🔥 Купон «День услужливой жены»"
+"🧡 Купон на массаж",
+"💋 Купон на поцелуй",
+"🍿 Купон на кино",
+"☕ Купон на кофе вместе"
 ]
 
+rare_coupon = "❤️‍🔥 ЛЕГЕНДАРНЫЙ КУПОН!\nКупон «День услужливой жены»"
 
-def load():
-    try:
-        with open(DATA_FILE) as f:
-            return json.load(f)
-    except:
-        data = {
-            "last_day":"",
-            "message_opened":False,
-            "opened_today":0,
-            "activated_today":0,
-            "coupons":[{"name":c,"opened":False,"used":False} for c in coupons]
-        }
-        save(data)
-        return data
+def load_data():
+    if not os.path.exists(DATA_FILE):
+        return {}
+    with open(DATA_FILE,"r") as f:
+        return json.load(f)
 
-
-def save(data):
+def save_data(data):
     with open(DATA_FILE,"w") as f:
         json.dump(data,f)
 
+def get_user(user_id):
+    data = load_data()
+    if str(user_id) not in data:
+        data[str(user_id)] = {
+            "message_date": "",
+            "opened_today":0,
+            "activated_today":0,
+            "coupons":[]
+        }
+        save_data(data)
+    return data
 
-def reset(data):
-    today=str(datetime.now().date())
-    if data["last_day"]!=today:
-        data["last_day"]=today
-        data["message_opened"]=False
-        data["opened_today"]=0
-        data["activated_today"]=0
+def save_user(data):
+    save_data(data)
 
+def reset_limits(user):
+    today = str(date.today())
+    if user["message_date"] != today:
+        user["message_date"] = today
+        user["opened_today"] = 0
+        user["activated_today"] = 0
 
-def love_message(chat):
-    if random.randint(1,3)==1:
-        bot.send_message(chat, random.choice(love_replies))
+async def start(update:Update,context:ContextTypes.DEFAULT_TYPE):
 
+    keyboard = [
+        [InlineKeyboardButton("💌 Послание дня",callback_data="message")],
+        [InlineKeyboardButton("🎁 Мои купоны",callback_data="coupons")]
+    ]
 
-@bot.message_handler(commands=["start"])
-def start(m):
-
-    kb = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("💌 Послание дня")
-    kb.add("🎁 Мои купоны")
-
-    bot.send_message(
-        m.chat.id,
+    await update.message.reply_text(
         "Привет, любимый муж! 💕\n\nОткрой своё послание дня\nи не забудь про купоны! 💌🎁",
-        reply_markup=kb
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+async def button(update:Update,context:ContextTypes.DEFAULT_TYPE):
 
-@bot.message_handler(func=lambda m: m.text=="💌 Послание дня")
-def message_day(m):
+    query = update.callback_query
+    await query.answer()
 
-    data=load()
-    reset(data)
+    user_id = query.from_user.id
 
-    if data["message_opened"]:
-        bot.send_message(m.chat.id,"💌 Сегодняшнее послание уже открыто.\n\nВозвращайся завтра ❤️")
-        return
+    data = get_user(user_id)
+    user = data[str(user_id)]
 
-    text=random.choice(messages)
+    reset_limits(user)
 
-    data["message_opened"]=True
-    save(data)
+    if query.data == "message":
 
-    bot.send_message(m.chat.id,f"💌 Послание дня\n\n{text}")
+        if user["message_date"] == str(date.today()) and user["opened_today"] >= 0:
 
-    love_message(m.chat.id)
-
-
-@bot.message_handler(func=lambda m: m.text=="🎁 Мои купоны")
-def coupons_menu(m):
-
-    data=load()
-    reset(data)
-
-    kb=telebot.types.InlineKeyboardMarkup()
-
-    for i,c in enumerate(data["coupons"]):
-
-        if not c["opened"]:
-            t="🎁 Открой меня"
-        elif c["used"]:
-            t=c["name"]+" ✅"
-        else:
-            t=c["name"]
-
-        kb.add(
-            telebot.types.InlineKeyboardButton(
-                t,
-                callback_data=f"open_{i}"
-            )
-        )
-
-    bot.send_message(
-        m.chat.id,
-        f"🎁 Твои купоны\n\nСегодня можно открыть: {2-data['opened_today']}\nАктивировать: {1-data['activated_today']}",
-        reply_markup=kb
-    )
-
-
-@bot.callback_query_handler(func=lambda call:True)
-def click(call):
-
-    data=load()
-    reset(data)
-
-    if call.data.startswith("open_"):
-
-        i=int(call.data.split("_")[1])
-        c=data["coupons"][i]
-
-        if not c["opened"]:
-
-            if data["opened_today"]>=2:
-                bot.answer_callback_query(call.id,"Сегодня можно открыть только 2 купона")
+            if user.get("message_opened"):
+                await query.edit_message_text("💌 Сегодняшнее послание уже открыто.\n\nВозвращайся завтра ❤️")
                 return
 
-            c["opened"]=True
-            data["opened_today"]+=1
-            save(data)
+        msg = random.choice(messages)
+        user["message_opened"] = True
+        save_user(data)
 
-            kb=telebot.types.InlineKeyboardMarkup()
+        await query.edit_message_text(f"💌 Послание дня\n\n{msg}")
 
-            kb.add(
-                telebot.types.InlineKeyboardButton(
-                    "Активировать купон",
-                    callback_data=f"use_{i}"
-                )
-            )
+    elif query.data == "coupons":
 
-            kb.add(
-                telebot.types.InlineKeyboardButton(
-                    "Назад",
-                    callback_data="back"
-                )
-            )
+        available = 2 - user["opened_today"]
 
-            bot.send_message(
-                call.message.chat.id,
-                f"🎉 Сюрприз!\n\n{c['name']}",
-                reply_markup=kb
-            )
+        text = f"🎁 Твои купоны\n\nСегодня можно открыть: {available}\nАктивировать: {1-user['activated_today']}"
 
-            love_message(call.message.chat.id)
+        keyboard = []
 
+        for i in range(5):
+            keyboard.append([InlineKeyboardButton("🎁 Открой меня",callback_data="open_coupon")])
+
+        await query.edit_message_text(text,reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif query.data == "open_coupon":
+
+        if user["opened_today"] >= 2:
+            await query.answer("Сегодня больше нельзя открывать 😌",show_alert=True)
+            return
+
+        user["opened_today"] += 1
+
+        if random.randint(1,10) == 1:
+            coupon = rare_coupon
         else:
+            coupon = random.choice(coupons)
 
-            bot.answer_callback_query(call.id,"Купон уже открыт")
+        user["coupons"].append(coupon)
+        save_user(data)
 
+        keyboard = [
+            [InlineKeyboardButton("Активировать купон",callback_data="activate")],
+            [InlineKeyboardButton("Назад",callback_data="coupons")]
+        ]
 
-
-    elif call.data.startswith("use_"):
-
-        i=int(call.data.split("_")[1])
-        c=data["coupons"][i]
-
-        if c["used"]:
-            bot.answer_callback_query(call.id,"Уже использован")
-            return
-
-        if data["activated_today"]>=1:
-            bot.answer_callback_query(call.id,"Можно активировать только 1 купон в день")
-            return
-
-        c["used"]=True
-        data["activated_today"]+=1
-        save(data)
-
-        bot.send_message(
-            call.message.chat.id,
-            f"🎟 Купон активирован!\n\n{c['name']}"
+        await query.edit_message_text(
+            f"🎉 Сюрприз!\n\n{coupon}",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-        bot.send_message(
-            OWNER_ID,
-            f"❤️ Муж активировал купон:\n\n{c['name']}"
+    elif query.data == "activate":
+
+        if user["activated_today"] >= 1:
+            await query.answer("Сегодня уже активирован купон ❤️",show_alert=True)
+            return
+
+        if not user["coupons"]:
+            return
+
+        coupon = user["coupons"].pop(0)
+
+        user["activated_today"] += 1
+        save_user(data)
+
+        await query.edit_message_text(
+            f"🎟 Купон активирован!\n\n{coupon}"
         )
 
-        love_message(call.message.chat.id)
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=f"❤️ Муж активировал купон:\n\n{coupon}"
+        )
 
+async def random_love(context:ContextTypes.DEFAULT_TYPE):
+    text = random.choice([
+        "💌 Я просто хотела напомнить: я тебя люблю ❤️",
+        "❤️ Мне нравится радовать тебя",
+        "💘 Ты самый лучший муж"
+    ])
 
-    elif call.data=="back":
+    try:
+        await context.bot.send_message(chat_id=ADMIN_ID,text=text)
+    except:
+        pass
 
-        coupons_menu(call.message)
+app = ApplicationBuilder().token(TOKEN).build()
 
+app.add_handler(CommandHandler("start",start))
+app.add_handler(CallbackQueryHandler(button))
 
-bot.infinity_polling()
+app.job_queue.run_repeating(random_love,interval=43200,first=10)
+
+app.run_polling()
