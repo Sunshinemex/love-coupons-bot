@@ -5,8 +5,8 @@ from datetime import date
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
-TOKEN = os.getenv("8712590812:AAFrsZYzeKmhN3DzbolNlzU16ixNUnRAgf0")
-ADMIN_ID = int(os.getenv("200869072"))
+TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
 DATA_FILE = "data.json"
 
